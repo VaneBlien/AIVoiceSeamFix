@@ -1,4 +1,3 @@
-```markdown
 <div align="center">
 
 <img src="docs/logo.png" alt="AIVoiceSeamFix" width="200"/>
@@ -38,296 +37,331 @@
 
 ### 背景
 
-AI 语音合成（TTS）引擎在生成长文本时，通常将其分段处理后拼接输出。这一过程在波形层面引入了**不连续点**——时域阶跃突变、频域宽带噪声，主观感知为"毛刺"、"爆音"或"闷感"。
+AI 语音合成（TTS）引擎在生成长文本时，通常会将文本切分为多个片段，再分别合成并拼接输出。这个过程容易在波形层面产生**不连续点**，表现为时域阶跃、局部能量突变或频域宽带噪声，主观听感通常是：
 
-传统修复手段依赖音频编辑软件（Audition、Premiere Pro）的手动操作，对于分钟级以上的音频效率极低。
+- “咔哒”“爆音”“毛刺”
+- 句子衔接处不自然
+- 局部闷感、突兀感或音量跳变
+- 多段音频拼接后接缝明显
 
-**AIVoiceSeamFix** 将这一流程自动化：通过**小波变换**在时频域精确定位断裂点，再用**高斯卷积核**在局部区域平滑过渡，输出自然流畅的音频。
+传统修复方式通常依赖 Audition、Premiere Pro、RX 等音频编辑软件进行手动处理。对于分钟级、小时级长音频，人工定位和修复接缝效率很低，也难以稳定复现。
+
+**AIVoiceSeamFix** 将这一流程自动化：通过**小波变换**在时频域定位断裂点，再使用**高斯卷积平滑**和**等功率交叉淡化**对局部接缝进行自然过渡，尽可能保留原音色、原节奏和非破损区域。
+
+---
 
 ### 技术路线
 
 | 阶段 | 方法 | 作用 |
 |------|------|------|
-| 检测 | 离散小波变换 (DWT, db4) | 提取高频细节分量，定位局部突变 |
-| 区域构建 | 自适应扩展 + 合并 | 将孤立断裂点扩展为连续修复区域 |
-| 修复 | 高斯卷积 + 加权混合 | 平滑过渡，边缘保留原始信号 |
-| 拼接 | 等功率交叉淡化 | 多段音频无缝衔接 |
+| 检测 | 离散小波变换 DWT，默认 `db4` | 提取高频细节分量，定位局部突变 |
+| 区域构建 | 自适应扩展 + 邻近区域合并 | 将孤立断裂点扩展为连续可修复区域 |
+| 修复 | 高斯卷积 + 加权混合 | 平滑断裂区域，保留区域边缘原始信号 |
+| 拼接 | 等功率交叉淡化 | 多段音频无缝衔接，避免音量塌陷 |
+| 输出 | 格式转换 + 元数据回写 | 支持音频输出与视频音轨回灌 |
+
+---
 
 ### 特性
 
-- ✅ **全自动检测** — 无需手动标记断裂位置
-- ✅ **局部修复** — 仅处理断裂邻域，保留非破损区域原样
-- ✅ **多格式支持** — 输入 WAV/MP3/M4A/MP4，输出 WAV/MP3/M4A
-- ✅ **视频处理** — 自动提取视频音轨，修复后回灌
-- ✅ **批量拼接** — 多段音频等功率交叉淡化
-- ✅ **可扩展架构** — 算法插件化，新增算法只需实现标准接口
-- ✅ **前后端分离** — Julia 计算服务 + Python GUI，解耦可独立部署
-- ✅ **完整测试** — 270+ 单元测试，覆盖核心路径
+- ✅ **全自动检测**：无需手动标记断裂位置
+- ✅ **局部修复**：只处理断裂邻域，非破损区域保持原样
+- ✅ **多格式支持**：输入 WAV / MP3 / M4A / MP4，输出 WAV / MP3 / M4A
+- ✅ **视频处理**：自动提取视频音轨，修复后回灌
+- ✅ **批量拼接**：支持多段音频等功率交叉淡化
+- ✅ **可扩展架构**：算法插件化，新增算法只需实现标准接口
+- ✅ **前后端分离**：Julia 计算服务 + Python GUI，解耦部署
+- ✅ **完整测试**：270+ 单元测试，覆盖核心检测、修复与拼接路径
 
 ---
 
 ## 效果演示
 
+> 建议在 `docs/demo/` 中放入修复前后音频、波形图或短视频，用于直观展示效果。
+
 | 修复前 | 修复后 |
 |--------|--------|
-| 接缝处有可闻"咔嚓"声，波形可见明显阶跃 | 过渡平滑自然，波形连续 |
+| 接缝处有可闻“咔嚓”声，波形可见明显阶跃 | 过渡平滑自然，波形连续 |
+| `docs/demo/before.wav` | `docs/demo/after.wav` |
+| `docs/demo/before_waveform.png` | `docs/demo/after_waveform.png` |
 
+示例对比：
+
+```text
+原始音频  ────▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁────
+断裂接缝  ────▁▁▁▁▁▁▁▁████▁▁▁▁────
+修复结果  ────▁▁▁▁▁▁▁▂▃▄▃▂▁▁────
 ```
-修复前: ▁▁▁▁▁▁▁▁|▔▔▔▔▔▔▔▔  ← 阶跃突变
-修复后: ▁▁▁▁▁▁▁▂▃▄▅▆▇█▔▔▔  ← 平滑过渡
-```
-
-<details>
-<summary>📊 波形对比图（点击展开）</summary>
-
-```
-原音波形 (接缝处放大):
-░░░░░░░░░░░░░░░░░░░░│████████████████████
-                     ↑ 断裂点
-
-修复后波形:
-░░░░░░░░░░░░░░░░░▄▄▄▆▆██████████████████
-                  ↑ 平滑过渡区
-```
-
-</details>
 
 ---
 
 ## 系统架构
 
-### 分层设计
+AIVoiceSeamFix 采用前后端分离设计：
 
-```
-┌──────────────────────────────────────────────┐
-│            表示层 (GUI / HTTP)                 │
-│  Python PyQt6  /  Julia HTTP.jl              │
-├──────────────────────────────────────────────┤
-│            编排层 (Pipeline)                  │
-│  ApiPipeline  /  ExportPipeline              │
-├──────────────────────────────────────────────┤
-│            算法核心层 (AlgorithmCore)          │
-│  AudioBuffer → AlgorithmResult               │
-│  不依赖文件格式 / GUI / HTTP                  │
-├──────────────────────────────────────────────┤
-│            基础设施层 (Media)                  │
-│  FFmpegRunner / AudioDecode / AudioEncode    │
-└──────────────────────────────────────────────┘
-```
+- **Julia 后端**：负责音频读取、断裂检测、局部修复、拼接与导出
+- **Python GUI / CLI**：负责用户交互、任务管理、文件选择、参数配置和结果展示
+- **FFmpeg**：负责音视频格式转换、视频音轨提取和回灌
 
-### 数据流
+```mermaid
+flowchart LR
+    A[输入音频/视频] --> B[格式解析与预处理]
+    B --> C[小波断裂检测]
+    C --> D[修复区域构建]
+    D --> E[高斯平滑修复]
+    E --> F[交叉淡化/拼接]
+    F --> G[格式导出]
 
-```
-输入文件 (mp3/mp4/wav)
-       │
-       ▼
-  MediaIO.decode_to_audiobuffer()
-       │  FFmpeg → 临时 WAV → AudioBuffer
-       ▼
-  Runner.run_repair_algorithm()
-       │  Registry 查找 → process()
-       ▼
-  WaveletGaussianRepair.process()
-       │  1. WaveletDetector   — 小波变换 → 断裂点
-       │  2. RegionBuilder     — 断裂点 → RepairRegion[]
-       │  3. GaussianSmoother  — 高斯卷积平滑
-       ▼
-  ExportPipeline.export_result()
-       │  AudioEncode / VideoMux
-       ▼
- 输出文件 (wav/mp3/m4a/mp4)
+    H[Python GUI / CLI] --> I[Julia 计算服务]
+    I --> B
+    I --> C
+    I --> D
+    I --> E
+    I --> F
+
+    J[FFmpeg] --> B
+    G --> J
 ```
 
 ---
 
 ## 快速开始
 
-### 环境依赖
+### 环境要求
 
-| 软件 | 版本要求 | 用途 |
-|------|----------|------|
-| Julia | ≥ 1.10 | 算法计算引擎 |
-| Python | ≥ 3.10 | GUI 前端 |
-| FFmpeg | ≥ 4.0 | 音频/视频编解码 |
-| FFprobe | ≥ 4.0 | 媒体元数据探测 |
+| 依赖 | 版本 | 用途 |
+|------|------|------|
+| Julia | 1.10+ | 核心算法与计算服务 |
+| Python | 3.10+ | GUI、CLI 与任务编排 |
+| FFmpeg | 建议 6.0+ | 音视频编解码与格式转换 |
+| Git | 任意较新版本 | 拉取项目代码 |
 
-> FFmpeg/FFprobe 需在系统 PATH 中可调用。
-
-### 安装步骤
+检查环境：
 
 ```bash
-# 1. 克隆仓库
-git clone https://github.com/your-org/AIVoiceSeamFix.git
+julia --version
+python --version
+ffmpeg -version
+git --version
+```
+
+---
+
+### 1. 克隆项目
+
+```bash
+git clone https://github.com/<your-name>/AIVoiceSeamFix.git
 cd AIVoiceSeamFix
-
-# 2. 安装 Julia 依赖
-cd julia
-julia --project=. -e 'import Pkg; Pkg.instantiate()'
-cd ..
-
-# 3. 创建 Python 虚拟环境并安装依赖
-python setup_gui_env.py
-
-# 4. (可选) 生成测试音频
-python create_test_audio.py
 ```
 
-### 启动服务
+---
 
-**终端 1 — Julia 后端**：
+### 2. 安装 Julia 依赖
 
 ```bash
-julia --project=julia julia/server.jl
-
-# 自定义端口
-julia --project=julia julia/server.jl --port 9000
+cd julia_backend
+julia --project=. -e 'using Pkg; Pkg.instantiate()'
 ```
 
-**终端 2 — Python GUI**：
+运行 Julia 后端服务：
 
 ```bash
-# Windows
-scripts\start_gui.bat
-
-# macOS / Linux
-bash scripts/start_gui.sh
+julia --project=. src/server.jl
 ```
 
-### 运行测试
+默认服务地址：
+
+```text
+http://127.0.0.1:8080
+```
+
+> 若你的实际入口文件不是 `src/server.jl`，请替换为项目中的真实启动文件。
+
+---
+
+### 3. 安装 Python 依赖
 
 ```bash
-julia --project=julia julia/test/runtests.jl
+cd ../python_app
+python -m venv .venv
+```
+
+Windows：
+
+```bash
+.venv\Scripts\activate
+```
+
+macOS / Linux：
+
+```bash
+source .venv/bin/activate
+```
+
+安装依赖：
+
+```bash
+pip install -r requirements.txt
+```
+
+---
+
+### 4. 启动 GUI
+
+```bash
+python app.py
+```
+
+或启动命令行模式：
+
+```bash
+python cli.py repair input.wav -o output.wav
+```
+
+---
+
+### 5. 修复单个音频
+
+```bash
+python cli.py repair examples/input.wav \
+  --output examples/output.wav \
+  --threshold 0.65 \
+  --window-ms 20 \
+  --sigma 2.0
+```
+
+---
+
+### 6. 批量拼接多段音频
+
+```bash
+python cli.py concat \
+  part_01.wav part_02.wav part_03.wav \
+  --output merged.wav \
+  --crossfade-ms 50
+```
+
+---
+
+### 7. 修复视频音轨
+
+```bash
+python cli.py repair-video input.mp4 \
+  --output output.mp4 \
+  --keep-video
 ```
 
 ---
 
 ## API 参考
 
-### 端点概览
+> 以下接口为推荐设计，具体路径请以项目实际实现为准。
 
-| 方法 | 路径 | 描述 |
-|------|------|------|
-| `GET` | `/api/algorithms` | 查询所有已注册算法及其参数 |
-| `POST` | `/api/run` | 统一运行入口（repair / join） |
-| `POST` | `/api/repair` | 修复快捷方式 |
-| `POST` | `/api/join` | 拼接快捷方式 |
-| `GET` | `/api/status` | 服务健康检查 |
-| `POST` | `/api/shutdown` | 安全关闭服务 |
+### 健康检查
 
-### GET /api/algorithms
-
-返回所有可用算法及其参数规格。
-
-```bash
-curl http://127.0.0.1:8765/api/algorithms
+```http
+GET /health
 ```
 
-<details>
-<summary>响应示例</summary>
+响应示例：
 
 ```json
 {
-  "ok": true,
-  "algorithms": [
+  "status": "ok",
+  "service": "AIVoiceSeamFix",
+  "version": "0.1.0"
+}
+```
+
+---
+
+### 检测断裂点
+
+```http
+POST /api/detect
+Content-Type: multipart/form-data
+```
+
+参数：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `file` | File | 是 | 输入音频文件 |
+| `wavelet` | String | 否 | 小波基，默认 `db4` |
+| `threshold` | Float | 否 | 检测阈值，默认 `0.65` |
+| `min_gap_ms` | Int | 否 | 相邻断裂点最小间隔 |
+
+响应示例：
+
+```json
+{
+  "sample_rate": 44100,
+  "duration": 12.34,
+  "seams": [
     {
-      "id": "wavelet_gaussian_repair",
-      "name": "Wavelet + Gaussian Repair",
-      "version": "0.1.0",
-      "mode": "repair",
-      "channel_policy": "mono",
-      "params": [
-        {
-          "name": "sensitivity",
-          "type": "Float64",
-          "default": 8.0,
-          "label": "检测灵敏度",
-          "description": "数值越高，误检越少，但可能漏检",
-          "min": 2.0,
-          "max": 20.0,
-          "step": 1.0
-        },
-        {
-          "name": "alpha",
-          "type": "Float64",
-          "default": 0.45,
-          "label": "平滑强度",
-          "description": "0=保持原样，1=完全平滑",
-          "min": 0.1,
-          "max": 0.8,
-          "step": 0.05
-        }
-      ]
-    },
-    {
-      "id": "equal_power_crossfade_join",
-      "name": "Equal-Power Crossfade Join",
-      "version": "0.1.0",
-      "mode": "join",
-      "channel_policy": "mono",
-      "params": [
-        {
-          "name": "fade_ms",
-          "type": "Float64",
-          "default": 25.0,
-          "label": "Crossfade 时长 (ms)",
-          "min": 5.0,
-          "max": 120.0,
-          "step": 5.0
-        }
-      ]
+      "time": 1.245,
+      "sample": 54874,
+      "score": 0.91
     }
   ]
 }
 ```
 
-</details>
+---
 
-### POST /api/run
+### 修复音频
 
-统一运行接口。
-
-**Repair 请求**：
-
-```bash
-curl -X POST http://127.0.0.1:8765/api/run \
-  -H "Content-Type: application/json" \
-  -d '{
-    "mode": "repair",
-    "algorithm_id": "wavelet_gaussian_repair",
-    "input_path": "/path/to/input.wav",
-    "output_path": "/path/to/output.wav",
-    "output_format": "wav",
-    "params": {
-      "sensitivity": 8.0,
-      "alpha": 0.45
-    }
-  }'
+```http
+POST /api/repair
+Content-Type: multipart/form-data
 ```
 
-**Join 请求**：
+参数：
 
-```bash
-curl -X POST http://127.0.0.1:8765/api/run \
-  -H "Content-Type: application/json" \
-  -d '{
-    "mode": "join",
-    "algorithm_id": "equal_power_crossfade_join",
-    "input_paths": ["/path/seg1.wav", "/path/seg2.wav"],
-    "output_path": "/path/joined.wav",
-    "params": {
-      "fade_ms": 25.0
-    }
-  }'
-```
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `file` | File | 是 | 输入音频文件 |
+| `threshold` | Float | 否 | 检测阈值 |
+| `window_ms` | Int | 否 | 修复窗口大小 |
+| `sigma` | Float | 否 | 高斯核标准差 |
+| `output_format` | String | 否 | `wav`、`mp3` 或 `m4a` |
 
-**响应**：
+响应：
 
 ```json
 {
-  "ok": true,
-  "algorithm_id": "wavelet_gaussian_repair",
-  "detected_regions": 3,
-  "output_path": "/path/to/output.wav"
+  "status": "success",
+  "seams_detected": 8,
+  "regions_repaired": 6,
+  "output": "output.wav"
+}
+```
+
+---
+
+### 拼接音频
+
+```http
+POST /api/concat
+Content-Type: multipart/form-data
+```
+
+参数：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `files` | File[] | 是 | 多个音频片段 |
+| `crossfade_ms` | Int | 否 | 交叉淡化时长 |
+| `output_format` | String | 否 | 输出格式 |
+
+响应示例：
+
+```json
+{
+  "status": "success",
+  "segments": 3,
+  "duration": 185.7,
+  "output": "merged.wav"
 }
 ```
 
@@ -335,259 +369,289 @@ curl -X POST http://127.0.0.1:8765/api/run \
 
 ## 算法参数
 
-### wavelet_gaussian_repair
+| 参数 | 默认值 | 建议范围 | 说明 |
+|------|--------|----------|------|
+| `wavelet` | `db4` | `db2` / `db4` / `sym4` | 小波基函数 |
+| `level` | auto | 2–6 | 小波分解层数 |
+| `threshold` | `0.65` | 0.3–0.9 | 断裂检测灵敏度，越低越敏感 |
+| `window_ms` | `20` | 5–80 | 单个断裂点周围的修复窗口 |
+| `merge_gap_ms` | `30` | 10–100 | 相邻修复区域的合并距离 |
+| `sigma` | `2.0` | 0.5–5.0 | 高斯平滑强度 |
+| `crossfade_ms` | `50` | 10–200 | 多段拼接时的交叉淡化时长 |
+| `preserve_edges` | `true` | true / false | 是否保留修复区域边缘原始信号 |
 
-| 参数 | 类型 | 默认值 | 范围 | 说明 |
-|------|------|--------|------|------|
-| `sensitivity` | Float64 | 8.0 | 2.0 – 20.0 | 检测灵敏度。越低越敏感，可能误检；越高越保守，可能漏检 |
-| `expand_ms` | Float64 | 50.0 | 10.0 – 120.0 | 断裂点向两侧扩展宽度 (ms) |
-| `merge_ms` | Float64 | 80.0 | 10.0 – 200.0 | 相邻区域间距小于此值时合并 (ms) |
-| `window_ms` | Float64 | 60.0 | 10.0 – 150.0 | 高斯平滑窗口半宽 (ms) |
-| `sigma_ms` | Float64 | 4.0 | 1.0 – 20.0 | 高斯核标准差 (ms) |
-| `alpha` | Float64 | 0.45 | 0.1 – 0.8 | 平滑强度。0=保持原样，1=完全平滑 |
+参数调优建议：
 
-### equal_power_crossfade_join
-
-| 参数 | 类型 | 默认值 | 范围 | 说明 |
-|------|------|--------|------|------|
-| `fade_ms` | Float64 | 25.0 | 5.0 – 120.0 | 交叉淡化时长 (ms) |
+| 场景 | 建议 |
+|------|------|
+| 轻微毛刺 | 提高 `threshold`，减小 `window_ms` |
+| 明显爆音 | 降低 `threshold`，增大 `window_ms` |
+| 拼接处音量忽大忽小 | 增大 `crossfade_ms` |
+| 修复后声音发闷 | 减小 `sigma` 或缩小修复区域 |
+| 漏检断裂点 | 降低 `threshold`，或提高小波分解层数 |
 
 ---
 
 ## 项目结构
 
-```
+```text
 AIVoiceSeamFix/
-│
-├── julia/                          # Julia 计算后端
-│   ├── server.jl                   # HTTP 服务入口
-│   ├── Project.toml                # Julia 依赖声明
-│   └── src/
-│       ├── AIVoiceSeamFix.jl       # 顶层模块 + Registry 初始化
-│       │
-│       ├── Core/                   # 核心抽象层
-│       │   ├── Types.jl            # AudioBuffer, RepairRegion, AlgorithmResult
-│       │   ├── Params.jl           # ParamSpec 参数描述 + 验证
-│       │   ├── Interface.jl        # 抽象算法接口定义
-│       │   ├── Registry.jl         # 算法注册中心
-│       │   ├── Runner.jl           # 统一调度入口
-│       │   └── Errors.jl           # 错误类型层次
-│       │
-│       ├── Media/                  # 媒体 IO 层
-│       │   ├── FFmpegRunner.jl     # FFmpeg / FFprobe 命令封装
-│       │   ├── MediaProbe.jl       # 媒体元数据提取
-│       │   ├── AudioDecode.jl      # 任意格式 → AudioBuffer
-│       │   ├── AudioEncode.jl      # AudioBuffer → 文件
-│       │   ├── VideoMux.jl         # 视频音轨替换
-│       │   └── MediaIO.jl          # 统一 IO 门面
-│       │
-│       ├── Algorithms/             # 算法实现
-│       │   ├── Common/
-│       │   │   └── Kernels.jl      # 高斯核等通用信号处理工具
-│       │   ├── Repair/
-│       │   │   ├── WaveletDetector.jl       # 小波断裂检测
-│       │   │   ├── RegionBuilder.jl         # 断裂区域构建
-│       │   │   ├── GaussianSmoother.jl      # 高斯卷积平滑
-│       │   │   └── WaveletGaussianRepair.jl # 完整修复算法组装
-│       │   └── Join/
-│       │       └── EqualPowerCrossfadeJoin.jl # 等功率交叉淡化
-│       │
-│       ├── Pipeline/               # 编排层
-│       │   ├── ApiPipeline.jl      # HTTP 请求 → Runner → 响应
-│       │   └── ExportPipeline.jl   # AlgorithmResult → 文件输出
-│       │
-│       ├── Server/
-│       │   └── ApiServer.jl        # HTTP 路由 + CORS + 生命周期
-│       │
-│       └── test/                   # 单元测试 (270+ cases)
-│           ├── runtests.jl
-│           ├── test_types.jl
-│           ├── test_interface.jl
-│           ├── test_registry.jl
-│           ├── test_runner.jl
-│           ├── test_media_probe.jl
-│           ├── test_audio_decode.jl
-│           ├── test_audio_encode.jl
-│           ├── test_detector.jl
-│           ├── test_region_builder.jl
-│           ├── test_smoother.jl
-│           ├── test_pipeline.jl
-│           ├── test_crossfade.jl
-│           └── test_export.jl
-│
-├── gui/                            # Python 桌面 GUI
-│   ├── main.py                     # 应用入口
-│   ├── requirements.txt            # Python 依赖
-│   └── app/
-│       ├── main_window.py          # 主窗口布局
-│       ├── services/
-│       │   ├── api_client.py       # Julia 后端 HTTP 客户端
-│       │   ├── file_manager.py     # 文件路径管理
-│       │   └── audio_player.py     # 系统音频播放器
-│       ├── workers/
-│       │   ├── repair_worker.py    # 后台修复线程
-│       │   └── probe_worker.py     # 后台媒体探测线程
-│       └── widgets/
-│           ├── drop_area.py        # 拖拽上传组件
-│           ├── params_panel.py     # 动态参数面板
-│           ├── result_panel.py     # 结果展示
-│           └── log_panel.py        # 操作日志
-│
-├── config/
-│   └── default.toml                # 默认配置文件
-│
-├── contracts/                      # 接口规范
-│   ├── api_schema.md               # API 契约
-│   ├── media_support.md            # 媒体格式支持
-│   └── algorithm_interface.md      # 算法接口规范
-│
-├── docs/                           # 技术文档
-│   ├── architecture.md             # 系统架构
-│   ├── algorithm.md                # 算法原理
-│   ├── media_pipeline.md           # 媒体处理管线
-│   ├── plugin_development.md       # 算法开发指南
-│   └── roadmap.md                  # 路线图
-│
-├── scripts/                        # 启停脚本
-│   ├── start_gui.bat / .sh         # GUI 启动
-│   └── dev_run_julia.sh            # Julia 开发启动
-│
-├── examples/                       # 测试音频素材
-│   ├── repair_input.wav
-│   ├── repair_input.mp3
-│   ├── repair_input.mp4
-│   └── segments/
-│
-├── output/                         # 修复输出目录
-├── temp/                           # 临时文件
-├── logs/                           # 日志
-│
-├── setup_gui_env.py                # GUI 环境初始化脚本
-├── create_test_audio.py            # 测试音频生成脚本
-├── README.md                       # 本文件
-├── LICENSE                         # MIT
-└── .gitignore
+├── docs/
+│   ├── logo.png
+│   └── demo/
+│       ├── before.wav
+│       ├── after.wav
+│       ├── before_waveform.png
+│       └── after_waveform.png
+├── examples/
+│   ├── input.wav
+│   └── output.wav
+├── julia_backend/
+│   ├── Project.toml
+│   ├── Manifest.toml
+│   ├── src/
+│   │   ├── AIVoiceSeamFix.jl
+│   │   ├── server.jl
+│   │   ├── detection/
+│   │   ├── repair/
+│   │   ├── io/
+│   │   └── concat/
+│   └── test/
+│       ├── runtests.jl
+│       ├── test_detection.jl
+│       ├── test_repair.jl
+│       └── test_concat.jl
+├── python_app/
+│   ├── app.py
+│   ├── cli.py
+│   ├── requirements.txt
+│   ├── aivoiceseamfix/
+│   │   ├── api_client.py
+│   │   ├── gui/
+│   │   ├── tasks/
+│   │   └── utils/
+│   └── tests/
+├── scripts/
+│   ├── build.sh
+│   ├── build.ps1
+│   └── package.py
+├── LICENSE
+└── README.md
 ```
 
 ---
 
 ## 开发指南
 
-### 新增算法
+### 代码风格
 
-只需实现 `Core/Interface.jl` 中定义的抽象接口：
+- Julia 代码建议使用 `JuliaFormatter.jl`
+- Python 代码建议使用 `ruff`、`black` 或项目统一格式化工具
+- 核心算法模块应避免和 GUI 逻辑耦合
+- 新增算法需要提供单元测试和最小示例
+
+---
+
+### 新增检测算法
+
+建议实现统一接口：
 
 ```julia
-# 1. 定义算法结构体
-struct MySpectralRepair <: AbstractRepairAlgorithm end
+abstract type AbstractSeamDetector end
 
-# 2. 实现必需的接口方法
-algorithm_id(::MySpectralRepair) = "my_spectral_repair"
-algorithm_name(::MySpectralRepair) = "My Spectral Repair"
-algorithm_mode(::MySpectralRepair) = "repair"
-
-function parameter_specs(::MySpectralRepair)
-    return [
-        ParamSpec(
-            name = :strength,
-            type = Float64,
-            default = 0.5,
-            label = "强度",
-            min = 0.0, max = 1.0, step = 0.05,
-        ),
-    ]
+struct WaveletSeamDetector <: AbstractSeamDetector
+    wavelet::String
+    threshold::Float64
 end
 
-# 3. 实现核心处理逻辑
-function process(
-    algorithm::MySpectralRepair,
-    audio::AudioBuffer,
-    params::Dict{Symbol, Any},
-    ctx::AlgorithmContext,
-)::AlgorithmResult
-    # 你的修复逻辑
-    return AlgorithmResult(audio = processed_audio, ...)
+function detect(detector::AbstractSeamDetector, signal, sample_rate)
+    # return Vector{Seam}
 end
 ```
 
-然后在 `AIVoiceSeamFix.jl` 中 include 并注册：
+---
+
+### 新增修复算法
+
+建议实现统一接口：
 
 ```julia
-include("Algorithms/Repair/MySpectralRepair.jl")
+abstract type AbstractSeamRepairer end
 
-function __init__()
-    # ...
-    register_algorithm!(REGISTRY, MySpectralRepair.MySpectralRepairAlgorithm())
+struct GaussianRepairer <: AbstractSeamRepairer
+    window_ms::Int
+    sigma::Float64
+end
+
+function repair(repairer::AbstractSeamRepairer, signal, seams, sample_rate)
+    # return repaired_signal
 end
 ```
 
-GUI 会自动通过 `/api/algorithms` 发现新算法并生成参数面板。
+---
 
-### 运行测试
+### Python 调用 Julia 服务
 
-```bash
-# 全部测试
-julia --project=julia julia/test/runtests.jl
+```python
+from aivoiceseamfix.api_client import SeamFixClient
 
-# 单个测试文件
-julia --project=julia -e 'include("julia/test/test_detector.jl")'
+client = SeamFixClient(base_url="http://127.0.0.1:8080")
+
+result = client.repair(
+    input_path="input.wav",
+    output_path="output.wav",
+    threshold=0.65,
+    window_ms=20,
+    sigma=2.0,
+)
+
+print(result)
 ```
 
 ---
 
 ## 测试
 
-| 测试模块 | 测试数 | 覆盖内容 |
-|----------|--------|----------|
-| Types | 55 | AudioBuffer / RepairRegion 构造与验证 |
-| Interface | 40 | 算法接口合规性、默认实现 |
-| Registry | 25 | 注册、查询、按模式筛选 |
-| Runner | 20 | 调度逻辑、模式匹配、错误处理 |
-| MediaProbe | 20 | FFprobe 调用、元数据解析 |
-| AudioDecode | 15 | WAV/MP3/MP4 解码 |
-| AudioEncode | 10 | WAV/MP3/M4A 编码往返 |
-| WaveletDetector | 15 | 人工信号断裂检测 |
-| RegionBuilder | 15 | 区域扩展、合并、边界裁切 |
-| GaussianSmoother | 15 | 平滑效果、参数影响 |
-| Pipeline | 15 | 端到端修复流程 |
-| CrossfadeJoin | 15 | 等功率交叉淡化 |
-| Export | 10 | 多格式导出 |
+### Julia 测试
+
+```bash
+cd julia_backend
+julia --project=. -e 'using Pkg; Pkg.test()'
+```
+
+或：
+
+```bash
+julia --project=. test/runtests.jl
+```
+
+---
+
+### Python 测试
+
+```bash
+cd python_app
+pytest
+```
+
+---
+
+### 覆盖率
+
+```bash
+pytest --cov=aivoiceseamfix
+```
+
+Julia 覆盖率可按项目实际配置运行：
+
+```bash
+julia --project=. --code-coverage=user test/runtests.jl
+```
+
+---
+
+## 常见问题
+
+### 1. 修复后声音变闷怎么办？
+
+通常是修复范围过大或高斯平滑过强。可以尝试：
+
+- 减小 `window_ms`
+- 减小 `sigma`
+- 提高 `threshold`，减少误检区域
+
+---
+
+### 2. 为什么有些断裂点没有被检测到？
+
+可能是断裂强度较弱、背景噪声较大或阈值过高。可以尝试：
+
+- 降低 `threshold`
+- 增加小波分解层数
+- 增大 `window_ms`
+- 对输入音频先做响度归一化
+
+---
+
+### 3. 支持立体声吗？
+
+建议内部处理时按声道独立检测或合并检测、分声道修复。实际支持情况请以当前实现为准。
+
+---
+
+### 4. 视频处理是否会重新编码画面？
+
+推荐默认保留原视频流，仅替换音轨。具体是否重新编码取决于 FFmpeg 参数和输出容器格式。
 
 ---
 
 ## 路线图
 
-- [x] **v0.1.0** — 小波检测 + 高斯平滑修复, HTTP API, Python GUI
-- [ ] **v0.2.0** — 频谱修复算法、批量处理
-- [ ] **v0.3.0** — Stage 级接口（Detector / RegionBuilder / Repairer 可替换组合）
-- [ ] **v0.4.0** — 神经网络去噪插件
-- [ ] **v1.0.0** — 独立安装包、多语言支持
+- [x] 小波断裂点检测
+- [x] 高斯平滑局部修复
+- [x] 等功率交叉淡化拼接
+- [x] Python GUI / CLI 原型
+- [x] 多格式音频输入输出
+- [ ] 批量任务队列
+- [ ] 波形可视化与断裂点标注
+- [ ] 手动微调修复区域
+- [ ] GPU / 多线程加速
+- [ ] VST / 插件化音频工作流集成
+- [ ] Docker 一键部署
+- [ ] GitHub Actions 自动测试与打包发布
 
 ---
 
 ## 贡献
 
-欢迎提交 Issue 和 Pull Request。
+欢迎提交 Issue、Pull Request 或改进建议。
+
+建议流程：
 
 1. Fork 本仓库
-2. 创建特性分支 (`git checkout -b feature/amazing-feature`)
-3. 提交更改 (`git commit -m 'Add amazing feature'`)
-4. 推送到分支 (`git push origin feature/amazing-feature`)
+2. 创建功能分支
+
+```bash
+git checkout -b feature/your-feature
+```
+
+3. 提交修改
+
+```bash
+git commit -m "feat: add your feature"
+```
+
+4. 推送分支
+
+```bash
+git push origin feature/your-feature
+```
+
 5. 创建 Pull Request
 
-提交前请确保 `julia --project=julia julia/test/runtests.jl` 全部通过。
+提交 PR 前请确认：
+
+- 已添加或更新相关测试
+- 已通过 Julia 与 Python 测试
+- 已更新 README 或相关文档
+- 未提交大体积音视频样本文件，必要时请放入 Release 或外部存储
 
 ---
 
 ## 许可证
 
-本项目采用 [MIT License](LICENSE)。
+本项目基于 MIT License 开源，详见 [LICENSE](LICENSE)。
+
+---
+
+## 致谢
+
+感谢 Julia、Python、FFmpeg 以及开源音频处理社区提供的优秀工具链。
 
 ---
 
 <div align="center">
 
-**⭐ 如果这个项目对你有帮助，请点个 Star**
+Made with ❤️ for cleaner AI voice production.
 
 </div>
-```
