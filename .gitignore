@@ -1,0 +1,24 @@
+# Julia
+julia/Manifest.toml
+julia/.CondaPkg/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+venv/
+
+# 输出与临时
+output/*
+temp/*
+logs/*
+!output/.gitkeep
+!temp/.gitkeep
+!logs/.gitkeep
+
+# 系统
+.DS_Store
+Thumbs.db
+*.swp
+*.swo

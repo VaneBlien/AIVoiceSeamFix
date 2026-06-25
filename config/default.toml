@@ -1,0 +1,20 @@
+[server]
+host = "127.0.0.1"
+port = 8765
+
+[detector]
+wavelet = "db4"
+level = 3
+threshold_ratio = 0.3
+
+[smoother]
+window_ms = 10
+sigma = 0.5
+
+[media]
+ffmpeg_path = "ffmpeg"
+ffprobe_path = "ffprobe"
+temp_dir = "temp"
+supported_inputs = ["wav", "mp3", "m4a", "mp4", "mov", "aac", "flac", "ogg"]
+supported_outputs = ["wav", "mp3", "m4a"]
+default_output = "wav"

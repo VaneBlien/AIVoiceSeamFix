@@ -1,0 +1,7 @@
+[logger]
+level = "INFO"
+format = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+
+[handler.file]
+class = "logging.FileHandler"
+filename = "logs/app.log"
